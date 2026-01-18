@@ -154,7 +154,7 @@ describe('Function Calling Rules', () => {
       invalid: [
         {
           code: `const tools = [{ codeExecution: { some: 'config' } }];`,
-          errors: [{ messageId: 'invalidCodeExecConfig' }],
+          errors: [{ messageId: 'invalidCodeExecutionConfig' }],
         },
       ],
     });
@@ -171,13 +171,17 @@ describe('Function Calling Rules', () => {
         `,
       ],
       invalid: [
+        // Rule reports TWO errors: one for missing 'executableCode', one for missing 'codeExecutionResult'
         {
           code: `
           const tools = [{ codeExecution: {} }];
           const result = await model.generateContent('Hello');
           console.log(result.response.text());
           `,
-          errors: [{ messageId: 'missingCodeExecHandling' }],
+          errors: [
+            { messageId: 'missingCodeExecutionHandling' },
+            { messageId: 'missingCodeExecutionHandling' },
+          ],
         },
       ],
     });
@@ -217,7 +221,7 @@ describe('Function Calling Rules', () => {
           const tools = [{ codeExecution: {} }];
           const result = await model.generateContent([{ fileData: { fileUri: 'gs://...', mimeType: 'text/csv' } }]);
           `,
-          errors: [{ messageId: 'noFileUriWithCodeExec' }],
+          errors: [{ messageId: 'noFileUriWithCodeExecution' }],
         },
       ],
     });

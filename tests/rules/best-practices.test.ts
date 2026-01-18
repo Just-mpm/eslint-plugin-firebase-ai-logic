@@ -44,44 +44,49 @@ describe('Best Practices Rules', () => {
   describe('no-thinking-simple-tasks', () => {
     ruleTester.run('no-thinking-simple-tasks', noThinkingSimpleTasks, {
       valid: [
-        // No thinking budget
+        // No thinking config
         `const model = getGenerativeModel(ai, { model: 'gemini-3-flash-preview' });`,
-        // Thinking disabled
+        // Low thinking level (appropriate for any task)
         `const model = getGenerativeModel(ai, {
           model: 'gemini-3-flash-preview',
-          generationConfig: { thinkingBudget: 0 }
+          thinkingConfig: { thinkingLevel: 'low' }
         });`,
-        // Thinking for complex task
+        // Minimal thinking level (Flash only)
+        `const model = getGenerativeModel(ai, {
+          model: 'gemini-3-flash-preview',
+          thinkingConfig: { thinkingLevel: 'minimal' }
+        });`,
+        // High thinking for complex task (no simple indicators in system instruction)
         `const model = getGenerativeModel(ai, {
           model: 'gemini-3-flash-preview',
           systemInstruction: 'You are a math expert. Solve complex equations.',
-          generationConfig: { thinkingBudget: 5000 }
+          thinkingConfig: { thinkingLevel: 'high' }
         });`,
       ],
       invalid: [
-        // Thinking for simple translation task
+        // High thinking for simple translation task (contains "translate")
         {
           code: `const model = getGenerativeModel(ai, {
             model: 'gemini-3-flash-preview',
             systemInstruction: 'Translate text to Portuguese',
-            generationConfig: { thinkingBudget: 5000 }
+            thinkingConfig: { thinkingLevel: 'high' }
           });`,
           errors: [{ messageId: 'thinkingForSimpleTask' }],
         },
-        // Very high thinking budget
+        // Invalid thinking level
         {
           code: `const model = getGenerativeModel(ai, {
             model: 'gemini-3-flash-preview',
-            generationConfig: { thinkingBudget: 20000 }
+            thinkingConfig: { thinkingLevel: 'ultra' }
           });`,
-          errors: [{ messageId: 'highThinkingBudget' }],
+          errors: [{ messageId: 'invalidThinkingLevel' }],
         },
-        // Thinking for classification task
+        // High thinking for classification task (contains "classify")
         {
           code: `const model = getGenerativeModel(ai, {
             model: 'gemini-3-flash-preview',
             systemInstruction: 'Classify text as positive, negative, or neutral',
-            generationConfig: { thinkingBudget: 3000 }
+            thinkingConfig: { thinkingLevel: 'high' }
           });`,
           errors: [{ messageId: 'thinkingForSimpleTask' }],
         },

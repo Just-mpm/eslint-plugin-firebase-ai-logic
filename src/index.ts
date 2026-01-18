@@ -277,7 +277,7 @@ const configs = {
 const plugin: ESLint.Plugin = {
   meta: {
     name: 'eslint-plugin-firebase-ai-logic',
-    version: '1.6.0',
+    version: '1.7.0',
   },
   rules,
   configs,

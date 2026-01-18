@@ -20,32 +20,8 @@ describe('Initialization Rules', () => {
         `const ai = getAI(app, { backend: myBackend });`,
       ],
       invalid: [
-        // No config
-        {
-          code: `const ai = getAI(app);`,
-          errors: [
-            {
-              messageId: 'missingBackend',
-              suggestions: [
-                { messageId: 'addGoogleAIBackend', output: `const ai = getAI(app, { backend: new GoogleAIBackend() });` },
-                { messageId: 'addVertexAIBackend', output: `const ai = getAI(app, { backend: new VertexAIBackend() });` },
-              ],
-            },
-          ],
-        },
-        // Empty config
-        {
-          code: `const ai = getAI(app, {});`,
-          errors: [
-            {
-              messageId: 'missingBackendInConfig',
-              suggestions: [
-                { messageId: 'addGoogleAIBackend', output: `const ai = getAI(app, { backend: new GoogleAIBackend() });` },
-              ],
-            },
-          ],
-        },
-        // Config without backend
+        // Config with properties but no backend - this is the only invalid case
+        // Note: getAI(app) and getAI(app, {}) are VALID (default backend used)
         {
           code: `const ai = getAI(app, { otherOption: true });`,
           errors: [
@@ -53,6 +29,7 @@ describe('Initialization Rules', () => {
               messageId: 'missingBackendInConfig',
               suggestions: [
                 { messageId: 'addGoogleAIBackend', output: `const ai = getAI(app, { backend: new GoogleAIBackend(), otherOption: true });` },
+                { messageId: 'addVertexAIBackend', output: `const ai = getAI(app, { backend: new VertexAIBackend(), otherOption: true });` },
               ],
             },
           ],

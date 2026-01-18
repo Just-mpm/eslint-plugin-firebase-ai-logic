@@ -1,7 +1,6 @@
 import { RuleTester } from '@typescript-eslint/rule-tester';
 import { describe, it } from 'vitest';
 
-import preferCountTokens from '../../src/rules/prefer-count-tokens.js';
 import noUnlimitedChatHistory from '../../src/rules/no-unlimited-chat-history.js';
 import preferBatchRequests from '../../src/rules/prefer-batch-requests.js';
 import noVerbosePrompts from '../../src/rules/no-verbose-prompts.js';
@@ -9,33 +8,8 @@ import noVerbosePrompts from '../../src/rules/no-verbose-prompts.js';
 const ruleTester = new RuleTester();
 
 describe('Performance Rules', () => {
-  describe('prefer-count-tokens', () => {
-    ruleTester.run('prefer-count-tokens', preferCountTokens, {
-      valid: [
-        // Short prompt
-        `const result = await model.generateContent('Hello');`,
-        // With countTokens before
-        `
-          const tokens = await model.countTokens(longPrompt);
-          if (tokens.totalTokens < 10000) {
-            const result = await model.generateContent(longPrompt);
-          }
-        `,
-      ],
-      invalid: [
-        // Long prompt without countTokens
-        {
-          code: `const result = await model.generateContent('${'x'.repeat(600)}');`,
-          errors: [{ messageId: 'largePromptWithoutCount' }],
-        },
-        // Array content (multimodal) without countTokens
-        {
-          code: `const result = await model.generateContent([imagePart, 'Describe this']);`,
-          errors: [{ messageId: 'largePromptWithoutCount' }],
-        },
-      ],
-    });
-  });
+  // Note: prefer-count-tokens rule does not exist in the plugin.
+  // Token counting is recommended in documentation but not enforced by a rule.
 
   describe('no-unlimited-chat-history', () => {
     ruleTester.run('no-unlimited-chat-history', noUnlimitedChatHistory, {

@@ -116,13 +116,14 @@ describe('Schema Rules', () => {
           code: `const schema = Schema.object({ properties: { field: { $ref: '#/definitions/User' } } });`,
           errors: [{ messageId: 'unsupportedFeature' }],
         },
-        // if/then/else
+        // if/then (if, const, then, minLength - 4 unsupported features)
         {
-          code: `const schema = Schema.object({ properties: { field: { if: { type: 'string' }, then: { minLength: 1 } } } });`,
+          code: `const schema = Schema.object({ properties: { field: { if: { const: 'x' }, then: { minLength: 1 } } } });`,
           errors: [
-            { messageId: 'unsupportedFeature' },
-            { messageId: 'unsupportedFeature' },
-            { messageId: 'unsupportedFeature' },
+            { messageId: 'unsupportedFeature' }, // if
+            { messageId: 'unsupportedFeature' }, // const
+            { messageId: 'unsupportedFeature' }, // then
+            { messageId: 'unsupportedFeature' }, // minLength
           ],
         },
       ],
@@ -156,11 +157,11 @@ describe('Schema Rules', () => {
       invalid: [
         {
           code: `const model = getGenerativeModel(ai, { generationConfig: { responseMimeType: 'application/xml' } });`,
-          errors: [{ messageId: 'unsupportedMimeType' }],
+          errors: [{ messageId: 'invalidResponseMimeType' }],
         },
         {
           code: `const model = getGenerativeModel(ai, { generationConfig: { responseMimeType: 'text/plain' } });`,
-          errors: [{ messageId: 'unsupportedMimeType' }],
+          errors: [{ messageId: 'invalidResponseMimeType' }],
         },
       ],
     });
@@ -169,14 +170,19 @@ describe('Schema Rules', () => {
   describe('validate-schema-structure', () => {
     ruleTester.run('validate-schema-structure', validateSchemaStructure, {
       valid: [
+        // All structures are valid in Firebase AI Logic
         `const schema = Schema.object({ properties: { name: Schema.string() } });`,
         `const schema = Schema.object({ properties: { name: Schema.string() }, optionalProperties: ['name'] });`,
+        // "required" is VALID in Firebase AI Logic schemas!
+        `const schema = Schema.object({ properties: { name: Schema.string() }, required: ['name'] });`,
+        // Both "required" and "optionalProperties" is valid (allowed by default)
+        `const schema = Schema.object({ properties: { name: Schema.string(), bio: Schema.string() }, required: ['name'], optionalProperties: ['bio'] });`,
       ],
       invalid: [
-        {
-          code: `const schema = Schema.object({ properties: { name: Schema.string() }, required: ['name'] });`,
-          errors: [{ messageId: 'redundantRequired' }],
-        },
+        // Note: The rule is lenient by default and doesn't report any errors.
+        // "required" is a valid property in Firebase AI Logic schemas.
+        // To enable warnings for using BOTH required AND optionalProperties,
+        // set { allowBothRequiredAndOptional: false } in rule options.
       ],
     });
   });

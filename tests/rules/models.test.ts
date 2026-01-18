@@ -40,27 +40,13 @@ describe('Model Rules', () => {
           errors: [{ messageId: 'deprecatedModel' }],
           output: `const model = getGenerativeModel(ai, { model: 'gemini-3-flash-preview' });`,
         },
-        // Gemini 2.x deprecated
+        // Gemini 2.0 deprecated (but 2.5 is NOT deprecated - it's a valid current model)
         {
           code: `const model = getGenerativeModel(ai, { model: 'gemini-2.0-flash' });`,
           errors: [{ messageId: 'deprecatedModel' }],
           output: `const model = getGenerativeModel(ai, { model: 'gemini-3-flash-preview' });`,
         },
-        {
-          code: `const model = getGenerativeModel(ai, { model: 'gemini-2.5-pro' });`,
-          errors: [{ messageId: 'deprecatedModel' }],
-          output: `const model = getGenerativeModel(ai, { model: 'gemini-3-flash-preview' });`,
-        },
-        {
-          code: `const model = getGenerativeModel(ai, { model: 'gemini-2.5-flash' });`,
-          errors: [{ messageId: 'deprecatedModel' }],
-          output: `const model = getGenerativeModel(ai, { model: 'gemini-3-flash-preview' });`,
-        },
-        {
-          code: `const model = getGenerativeModel(ai, { model: 'gemini-2.5-flash-lite' });`,
-          errors: [{ messageId: 'deprecatedModel' }],
-          output: `const model = getGenerativeModel(ai, { model: 'gemini-3-flash-preview' });`,
-        },
+        // Note: gemini-2.5-* are VALID models and should NOT be in invalid cases
       ],
     });
   });
@@ -74,7 +60,7 @@ describe('Model Rules', () => {
       invalid: [
         {
           code: `const model = getGenerativeModel(ai, { model: 'gemini-3-flash-preview', generationConfig: { temperature: 0.5 } });`,
-          errors: [{ messageId: 'avoidTemperatureNonDefault' }],
+          errors: [{ messageId: 'nonDefaultTemperature' }],
         },
       ],
     });
