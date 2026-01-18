@@ -2,6 +2,28 @@ import type { Rule } from 'eslint';
 import type { Node as ESTreeNode, ReturnStatement, FunctionDeclaration, FunctionExpression, ArrowFunctionExpression, CallExpression } from 'estree';
 import { getCalleeName, isCallExpression } from '../utils/ast-helpers.js';
 
+/**
+ * Patterns that indicate a function likely returns an AI instance.
+ * These are common naming conventions for AI wrapper/factory functions.
+ */
+const AI_WRAPPER_PATTERNS = [
+  /^getAI/i,           // getAI, getAIInstance, getAiClient
+  /^createAI/i,        // createAI, createAIInstance
+  /^initAI/i,          // initAI, initializeAI
+  /^aiInstance$/i,     // aiInstance (variable or function)
+  /^aiClient$/i,       // aiClient
+  /^firebaseAI$/i,     // firebaseAI
+  /AI$/,               // ends with AI (getMyAI, createFirebaseAI)
+  /AIInstance$/i,      // ends with AIInstance
+];
+
+/**
+ * Check if a function name matches common AI wrapper patterns
+ */
+function matchesAIWrapperPattern(name: string): boolean {
+  return AI_WRAPPER_PATTERNS.some(pattern => pattern.test(name));
+}
+
 const rule: Rule.RuleModule = {
   meta: {
     type: 'problem',
@@ -30,6 +52,10 @@ const rule: Rule.RuleModule = {
     // Track functions that return getAI() result (wrapper functions)
     // e.g., function getAIInstance() { return getAI(app); }
     const aiWrapperFunctions = new Set<string>();
+
+    // Track imported functions that match AI wrapper naming patterns
+    // These are assumed to be valid wrappers since we can't analyze external modules
+    const importedAIWrappers = new Set<string>();
 
     /**
      * Get the full name of a variable assignment target
@@ -184,10 +210,36 @@ const rule: Rule.RuleModule = {
      */
     function isAIWrapperCall(calleeName: string | null): boolean {
       if (!calleeName) return false;
-      return aiWrapperFunctions.has(calleeName);
+      // Check local wrapper functions (defined in this file)
+      if (aiWrapperFunctions.has(calleeName)) return true;
+      // Check imported functions that match AI wrapper naming patterns
+      if (importedAIWrappers.has(calleeName)) return true;
+      return false;
     }
 
     return {
+      // Track imports that match AI wrapper naming patterns
+      // e.g., import { getAIInstance } from '../ai';
+      ImportDeclaration(node) {
+        for (const specifier of node.specifiers) {
+          // Get the local name (what it's called in this file)
+          let localName: string | null = null;
+
+          if (specifier.type === 'ImportSpecifier') {
+            // import { getAIInstance } or import { getAIInstance as myAI }
+            localName = specifier.local.name;
+          } else if (specifier.type === 'ImportDefaultSpecifier') {
+            // import getAIInstance from '...'
+            localName = specifier.local.name;
+          }
+          // ImportNamespaceSpecifier (import * as ai) is not tracked as a wrapper
+
+          if (localName && matchesAIWrapperPattern(localName)) {
+            importedAIWrappers.add(localName);
+          }
+        }
+      },
+
       // Track function declarations that return getAI
       FunctionDeclaration(node) {
         const funcNode = node as unknown as FunctionDeclaration;

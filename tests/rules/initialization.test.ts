@@ -90,6 +90,48 @@ describe('Initialization Rules', () => {
 
         // ✅ Direct getAI call inline
         `const model = getGenerativeModel(getAI(app), { model: 'gemini-3-flash-preview' });`,
+
+        // ✅ Imported wrapper function - getAIInstance pattern (common in real projects)
+        `
+          import { getAIInstance } from '../ai';
+          const model = getGenerativeModel(getAIInstance(), { model: 'gemini-3-flash-preview' });
+        `,
+
+        // ✅ Imported wrapper function - with alias
+        `
+          import { getAIInstance as myAI } from './firebase';
+          const model = getGenerativeModel(myAI(), { model: 'gemini-3-flash-preview' });
+        `,
+
+        // ✅ Imported wrapper function - default import
+        `
+          import getAIInstance from '../lib/firebase/ai';
+          const model = getGenerativeModel(getAIInstance(), { model: 'gemini-3-flash-preview' });
+        `,
+
+        // ✅ Imported wrapper function - createAI* pattern
+        `
+          import { createAIClient } from '@/services/ai';
+          const model = getGenerativeModel(createAIClient(), { model: 'gemini-3-flash-preview' });
+        `,
+
+        // ✅ Imported wrapper function - initAI* pattern
+        `
+          import { initAI } from '../firebase';
+          const model = getGenerativeModel(initAI(), { model: 'gemini-3-flash-preview' });
+        `,
+
+        // ✅ Imported wrapper function - *AI suffix pattern
+        `
+          import { getFirebaseAI } from '../lib/ai';
+          const model = getGenerativeModel(getFirebaseAI(), { model: 'gemini-3-flash-preview' });
+        `,
+
+        // ✅ Imported wrapper function - aiInstance pattern (function call)
+        `
+          import { aiInstance } from '../ai-config';
+          const model = getGenerativeModel(aiInstance(), { model: 'gemini-3-flash-preview' });
+        `,
       ],
       invalid: [
         // No arguments
@@ -110,6 +152,24 @@ describe('Initialization Rules', () => {
             }
             const ai = getAI(app);
             const model = getGenerativeModel(getSomethingElse(), { model: 'gemini-3-flash-preview' });
+          `,
+          errors: [{ messageId: 'wrongFirstArg' }],
+        },
+        // ❌ Imported function with non-AI-wrapper name pattern
+        {
+          code: `
+            import { getConfig } from '../config';
+            const ai = getAI(app);
+            const model = getGenerativeModel(getConfig(), { model: 'gemini-3-flash-preview' });
+          `,
+          errors: [{ messageId: 'wrongFirstArg' }],
+        },
+        // ❌ Imported function - random name, not matching AI patterns
+        {
+          code: `
+            import { fetchClient } from '../services';
+            const ai = getAI(app);
+            const model = getGenerativeModel(fetchClient(), { model: 'gemini-3-flash-preview' });
           `,
           errors: [{ messageId: 'wrongFirstArg' }],
         },
