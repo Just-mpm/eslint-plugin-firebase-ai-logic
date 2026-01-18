@@ -1,5 +1,8 @@
 import type { ESLint, Linter } from 'eslint';
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { version } = require('../package.json') as { version: string };
+
 // Import rules
 import noGoogleGenaiImport from './rules/no-google-genai-import.js';
 import noVertexAiDirectImport from './rules/no-vertex-ai-direct-import.js';
@@ -277,7 +280,7 @@ const configs = {
 const plugin: ESLint.Plugin = {
   meta: {
     name: 'eslint-plugin-firebase-ai-logic',
-    version: '1.8.0',
+    version,
   },
   rules,
   configs,

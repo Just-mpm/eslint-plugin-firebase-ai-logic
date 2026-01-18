@@ -535,5 +535,5 @@ npm run test:watch
 
 Feito com ❤️ para developers Firebase AI Logic
 
-**Versão:** 1.1.0
+**Versão:** 1.9.0
 **NPM:** https://www.npmjs.com/package/eslint-plugin-firebase-ai-logic

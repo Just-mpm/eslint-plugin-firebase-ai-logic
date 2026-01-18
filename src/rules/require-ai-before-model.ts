@@ -1,4 +1,5 @@
 import type { Rule } from 'eslint';
+import type { Node as ESTreeNode, ReturnStatement, FunctionDeclaration, FunctionExpression, ArrowFunctionExpression, CallExpression } from 'estree';
 import { getCalleeName, isCallExpression } from '../utils/ast-helpers.js';
 
 const rule: Rule.RuleModule = {
@@ -25,6 +26,10 @@ const rule: Rule.RuleModule = {
 
     // Track class properties assigned from getAI (e.g., this.ai)
     const classAiProperties = new Set<string>();
+
+    // Track functions that return getAI() result (wrapper functions)
+    // e.g., function getAIInstance() { return getAI(app); }
+    const aiWrapperFunctions = new Set<string>();
 
     /**
      * Get the full name of a variable assignment target
@@ -95,9 +100,105 @@ const rule: Rule.RuleModule = {
       return false;
     }
 
+    /**
+     * Check if a node is a CallExpression calling getAI
+     */
+    function isGetAICall(node: ESTreeNode): boolean {
+      if (!isCallExpression(node)) return false;
+      return getCalleeName(node as CallExpression) === 'getAI';
+    }
+
+    /**
+     * Check if a function body contains a return statement that returns getAI() or a cached AI instance
+     * Handles patterns like:
+     * - return getAI(app);
+     * - if (!aiInstance) { aiInstance = getAI(app); } return aiInstance;
+     */
+    function functionReturnsAI(body: ESTreeNode): boolean {
+      if (body.type !== 'BlockStatement') {
+        // Arrow function with expression body: () => getAI(app)
+        if (isGetAICall(body)) {
+          return true;
+        }
+        return false;
+      }
+
+      // Track variables assigned from getAI within the function
+      const localAiVariables = new Set<string>();
+
+      // Check all statements in the block
+      for (const statement of body.body) {
+        // Track: aiInstance = getAI(app)
+        if (statement.type === 'ExpressionStatement' && statement.expression.type === 'AssignmentExpression') {
+          const assignment = statement.expression;
+          if (isGetAICall(assignment.right) && assignment.left.type === 'Identifier') {
+            localAiVariables.add(assignment.left.name);
+          }
+        }
+
+        // Track: const ai = getAI(app)
+        if (statement.type === 'VariableDeclaration') {
+          for (const decl of statement.declarations) {
+            if (decl.init && isGetAICall(decl.init) && decl.id.type === 'Identifier') {
+              localAiVariables.add(decl.id.name);
+            }
+          }
+        }
+
+        // Check if statements: if (!aiInstance) { aiInstance = getAI(app); }
+        if (statement.type === 'IfStatement') {
+          const consequent = statement.consequent;
+          if (consequent.type === 'BlockStatement') {
+            for (const innerStmt of consequent.body) {
+              if (innerStmt.type === 'ExpressionStatement' && innerStmt.expression.type === 'AssignmentExpression') {
+                const assignment = innerStmt.expression;
+                if (isGetAICall(assignment.right) && assignment.left.type === 'Identifier') {
+                  localAiVariables.add(assignment.left.name);
+                }
+              }
+            }
+          }
+        }
+
+        // Check return statements
+        if (statement.type === 'ReturnStatement') {
+          const returnStmt = statement as ReturnStatement;
+          if (returnStmt.argument) {
+            // return getAI(app)
+            if (isGetAICall(returnStmt.argument)) {
+              return true;
+            }
+            // return aiInstance (where aiInstance was assigned from getAI)
+            if (returnStmt.argument.type === 'Identifier' && localAiVariables.has(returnStmt.argument.name)) {
+              return true;
+            }
+          }
+        }
+      }
+
+      return false;
+    }
+
+    /**
+     * Check if a CallExpression is calling a known AI wrapper function
+     */
+    function isAIWrapperCall(calleeName: string | null): boolean {
+      if (!calleeName) return false;
+      return aiWrapperFunctions.has(calleeName);
+    }
+
     return {
-      // Track variable declarations that call getAI
+      // Track function declarations that return getAI
+      FunctionDeclaration(node) {
+        const funcNode = node as unknown as FunctionDeclaration;
+        if (funcNode.id && funcNode.body && functionReturnsAI(funcNode.body)) {
+          aiWrapperFunctions.add(funcNode.id.name);
+        }
+      },
+
+      // Track variable declarations that call getAI or are arrow functions returning getAI
       VariableDeclarator(node) {
+        // const ai = getAI(app)
         if (
           node.init &&
           isCallExpression(node.init) &&
@@ -105,6 +206,19 @@ const rule: Rule.RuleModule = {
           node.id.type === 'Identifier'
         ) {
           aiVariables.add(node.id.name);
+        }
+
+        // const getAIInstance = () => getAI(app)
+        // const getAIInstance = function() { return getAI(app); }
+        if (
+          node.init &&
+          node.id.type === 'Identifier' &&
+          (node.init.type === 'ArrowFunctionExpression' || node.init.type === 'FunctionExpression')
+        ) {
+          const funcExpr = node.init as ArrowFunctionExpression | FunctionExpression;
+          if (functionReturnsAI(funcExpr.body as ESTreeNode)) {
+            aiWrapperFunctions.add(node.id.name);
+          }
         }
       },
 
@@ -212,19 +326,25 @@ const rule: Rule.RuleModule = {
           return;
         }
 
-        // For CallExpression as first arg (e.g., getGenerativeModel(getAI(...), ...))
-        // This is valid if it's a direct getAI call
+        // For CallExpression as first arg (e.g., getGenerativeModel(getAI(...), ...) or getGenerativeModel(getAIInstance(), ...))
+        // This is valid if it's a direct getAI call OR a known AI wrapper function
         if (firstArg.type === 'CallExpression') {
           const innerCallee = getCalleeName(firstArg);
-          if (innerCallee !== 'getAI') {
-            context.report({
-              node: firstArg,
-              messageId: 'wrongFirstArg',
-              data: {
-                argType: innerCallee || 'function call',
-              },
-            });
+
+          // Valid cases:
+          // 1. getGenerativeModel(getAI(app), config) - direct getAI call
+          // 2. getGenerativeModel(getAIInstance(), config) - known wrapper function
+          if (innerCallee === 'getAI' || isAIWrapperCall(innerCallee)) {
+            return; // Valid - don't report
           }
+
+          context.report({
+            node: firstArg,
+            messageId: 'wrongFirstArg',
+            data: {
+              argType: innerCallee || 'function call',
+            },
+          });
         }
       },
     };

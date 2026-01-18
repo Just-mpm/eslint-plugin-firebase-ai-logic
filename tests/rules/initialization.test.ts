@@ -45,6 +45,51 @@ describe('Initialization Rules', () => {
         `const model = getGenerativeModel(ai, { model: 'gemini-3-flash-preview' });`,
         // Variable name
         `const model = getGenerativeModel(myAi, { model: 'gemini-3-flash-preview' });`,
+
+        // ✅ Wrapper function pattern - function declaration with direct return
+        `
+          function getAIInstance() {
+            return getAI(app);
+          }
+          const model = getGenerativeModel(getAIInstance(), { model: 'gemini-3-flash-preview' });
+        `,
+
+        // ✅ Wrapper function pattern - lazy initialization (common pattern)
+        `
+          let aiInstance = null;
+          function getAIInstance() {
+            if (!aiInstance) {
+              aiInstance = getAI(app);
+            }
+            return aiInstance;
+          }
+          const model = getGenerativeModel(getAIInstance(), { model: 'gemini-3-flash-preview' });
+        `,
+
+        // ✅ Arrow function wrapper
+        `
+          const getAIInstance = () => getAI(app);
+          const model = getGenerativeModel(getAIInstance(), { model: 'gemini-3-flash-preview' });
+        `,
+
+        // ✅ Arrow function wrapper with block body
+        `
+          const getAIInstance = () => {
+            return getAI(app);
+          };
+          const model = getGenerativeModel(getAIInstance(), { model: 'gemini-3-flash-preview' });
+        `,
+
+        // ✅ Function expression wrapper
+        `
+          const getAIInstance = function() {
+            return getAI(app);
+          };
+          const model = getGenerativeModel(getAIInstance(), { model: 'gemini-3-flash-preview' });
+        `,
+
+        // ✅ Direct getAI call inline
+        `const model = getGenerativeModel(getAI(app), { model: 'gemini-3-flash-preview' });`,
       ],
       invalid: [
         // No arguments
@@ -55,6 +100,17 @@ describe('Initialization Rules', () => {
         // Only config, no AI (object as first arg)
         {
           code: `const model = getGenerativeModel({ model: 'gemini-3-flash-preview' });`,
+          errors: [{ messageId: 'wrongFirstArg' }],
+        },
+        // ❌ Unknown function call (not a wrapper)
+        {
+          code: `
+            function getSomethingElse() {
+              return { not: 'ai' };
+            }
+            const ai = getAI(app);
+            const model = getGenerativeModel(getSomethingElse(), { model: 'gemini-3-flash-preview' });
+          `,
           errors: [{ messageId: 'wrongFirstArg' }],
         },
       ],
