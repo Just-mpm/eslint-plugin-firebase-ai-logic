@@ -106,16 +106,60 @@ const rule: Rule.RuleModule = {
           ) {
             return;
           }
+
+          // Skip if this is a description, message, text, or comment property
+          // These are likely documentation, not actual model usage
+          if (
+            property.key.type === 'Identifier' &&
+            ['description', 'message', 'text', 'comment', 'docs', 'documentation', 'note', 'error', 'warning', 'info', 'label', 'title', 'placeholder', 'hint'].includes(property.key.name.toLowerCase())
+          ) {
+            return;
+          }
         }
 
-        // Check if this looks like a model name being used as a variable value
-        const isDeprecated = DEPRECATED_MODELS.some(
+        // Skip if part of a longer string that looks like documentation/URL
+        // (model name with surrounding context suggesting it's not actual code usage)
+        if (
+          value.includes('http://') ||
+          value.includes('https://') ||
+          value.includes('deprecated') ||
+          value.includes('migrate') ||
+          value.includes('upgrade') ||
+          value.includes('was ') ||
+          value.includes('use ') ||
+          value.length > 100 // Long strings are likely documentation
+        ) {
+          return;
+        }
+
+        // Skip if the string is an argument to console.log, console.warn, etc.
+        if (
+          node.parent?.type === 'CallExpression' &&
+          node.parent.callee.type === 'MemberExpression' &&
+          node.parent.callee.object.type === 'Identifier' &&
+          node.parent.callee.object.name === 'console'
+        ) {
+          return;
+        }
+
+        // Skip if argument to throw new Error() or similar
+        if (
+          node.parent?.type === 'NewExpression' &&
+          node.parent.callee.type === 'Identifier' &&
+          ['Error', 'TypeError', 'RangeError', 'SyntaxError'].includes(node.parent.callee.name)
+        ) {
+          return;
+        }
+
+        // Only match exact model names or models/name format
+        // This avoids matching partial strings like "this gemini-1.5-pro model is..."
+        const isExactMatch = DEPRECATED_MODELS.some(
           (deprecated) =>
             value.toLowerCase() === deprecated.toLowerCase() ||
             value.toLowerCase() === `models/${deprecated.toLowerCase()}`
         );
 
-        if (isDeprecated) {
+        if (isExactMatch) {
           context.report({
             node,
             messageId: 'deprecatedModel',

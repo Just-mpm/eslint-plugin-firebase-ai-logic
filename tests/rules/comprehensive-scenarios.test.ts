@@ -737,14 +737,14 @@ describe('Comprehensive Scenarios - Firebase AI Logic', () => {
             `,
             errors: [{ messageId: 'sensitiveData' }],
           },
-          // ❌ Database connection string
+          // ❌ Database connection string - matches both connection string AND credentials in URL
           {
             code: `
               const model = getGenerativeModel(ai, {
                 systemInstruction: 'Database: mongodb://admin:pass123@cluster.mongodb.net/prod',
               });
             `,
-            errors: [{ messageId: 'sensitiveData' }],
+            errors: [{ messageId: 'sensitiveData' }, { messageId: 'sensitiveData' }],
           },
           // ❌ Bearer token / JWT
           {

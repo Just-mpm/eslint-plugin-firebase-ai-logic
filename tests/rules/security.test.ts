@@ -20,12 +20,12 @@ describe('Security Rules', () => {
         });`,
       ],
       invalid: [
-        // SSN pattern
+        // SSN pattern - matches both the SSN number AND the "SSN:" reference
         {
           code: `const model = getGenerativeModel(ai, {
             systemInstruction: 'User SSN: 123-45-6789',
           });`,
-          errors: [{ messageId: 'sensitiveData' }],
+          errors: [{ messageId: 'sensitiveData' }, { messageId: 'sensitiveData' }],
         },
         // Credit card pattern
         {
@@ -41,7 +41,7 @@ describe('Security Rules', () => {
           });`,
           errors: [{ messageId: 'sensitiveData' }],
         },
-        // API key pattern
+        // API key pattern - matches api_key reference (sk- too short for standalone pattern)
         {
           code: `const model = getGenerativeModel(ai, {
             systemInstruction: 'api_key: sk-1234567890abcdef',
@@ -55,12 +55,12 @@ describe('Security Rules', () => {
           });`,
           errors: [{ messageId: 'sensitiveData' }],
         },
-        // Database connection string
+        // Database connection string - matches both connection string AND credentials in URL
         {
           code: `const model = getGenerativeModel(ai, {
             systemInstruction: 'Connect to mongodb://user:pass@host:27017/db',
           });`,
-          errors: [{ messageId: 'sensitiveData' }],
+          errors: [{ messageId: 'sensitiveData' }, { messageId: 'sensitiveData' }],
         },
         // Bearer token
         {

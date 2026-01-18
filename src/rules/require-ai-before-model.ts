@@ -20,8 +20,80 @@ const rule: Rule.RuleModule = {
   },
 
   create(context) {
-    // Track getAI calls and their returned variables
+    // Track getAI calls and their returned variables (by name or pattern)
     const aiVariables = new Set<string>();
+
+    // Track class properties assigned from getAI (e.g., this.ai)
+    const classAiProperties = new Set<string>();
+
+    /**
+     * Get the full name of a variable assignment target
+     * Handles: identifier, this.property, and member expressions
+     */
+    function getAssignmentTargetName(node: Rule.Node): string | null {
+      if (node.type === 'Identifier') {
+        return node.name;
+      }
+
+      // this.ai = getAI(...)
+      if (
+        node.type === 'MemberExpression' &&
+        node.object.type === 'ThisExpression' &&
+        node.property.type === 'Identifier'
+      ) {
+        return `this.${node.property.name}`;
+      }
+
+      return null;
+    }
+
+    /**
+     * Get the name pattern used in getGenerativeModel's first argument
+     */
+    function getFirstArgPattern(node: Rule.Node): string | null {
+      // Simple identifier: ai
+      if (node.type === 'Identifier') {
+        return node.name;
+      }
+
+      // this.ai
+      if (
+        node.type === 'MemberExpression' &&
+        node.object.type === 'ThisExpression' &&
+        node.property.type === 'Identifier'
+      ) {
+        return `this.${node.property.name}`;
+      }
+
+      // ctx.ai or service.ai - we can't track these reliably
+      // so we'll be conservative and not report
+      if (
+        node.type === 'MemberExpression' &&
+        node.object.type === 'Identifier' &&
+        node.property.type === 'Identifier'
+      ) {
+        return `${node.object.name}.${node.property.name}`;
+      }
+
+      return null;
+    }
+
+    /**
+     * Check if the first argument is a known AI instance
+     */
+    function isKnownAiInstance(pattern: string): boolean {
+      // Direct match
+      if (aiVariables.has(pattern)) return true;
+      if (classAiProperties.has(pattern)) return true;
+
+      // If it's a property access like ctx.ai, we can't track it
+      // Be conservative and assume it's valid
+      if (pattern.includes('.') && !pattern.startsWith('this.')) {
+        return true; // Assume external properties are valid
+      }
+
+      return false;
+    }
 
     return {
       // Track variable declarations that call getAI
@@ -38,12 +110,27 @@ const rule: Rule.RuleModule = {
 
       // Track assignments that call getAI
       AssignmentExpression(node) {
+        if (isCallExpression(node.right) && getCalleeName(node.right) === 'getAI') {
+          const targetName = getAssignmentTargetName(node.left as Rule.Node);
+          if (targetName) {
+            if (targetName.startsWith('this.')) {
+              classAiProperties.add(targetName);
+            } else {
+              aiVariables.add(targetName);
+            }
+          }
+        }
+      },
+
+      // Track class property definitions with getAI
+      PropertyDefinition(node) {
         if (
-          isCallExpression(node.right) &&
-          getCalleeName(node.right) === 'getAI' &&
-          node.left.type === 'Identifier'
+          node.value &&
+          isCallExpression(node.value) &&
+          getCalleeName(node.value) === 'getAI' &&
+          node.key.type === 'Identifier'
         ) {
-          aiVariables.add(node.left.name);
+          classAiProperties.add(`this.${node.key.name}`);
         }
       },
 
@@ -65,30 +152,44 @@ const rule: Rule.RuleModule = {
 
         const firstArg = args[0];
 
-        // Check if first argument is an identifier
-        if (firstArg.type === 'Identifier') {
-          // Check if it's a known AI variable
-          if (!aiVariables.has(firstArg.name)) {
-            // It might be imported or defined elsewhere, so just warn
-            // We can't be 100% sure it's wrong
-            // Only report if the name doesn't look like an AI instance
-            const lowerName = firstArg.name.toLowerCase();
-            if (
-              !lowerName.includes('ai') &&
-              !lowerName.includes('vertex') &&
-              !lowerName.includes('firebase')
-            ) {
+        // Handle identifiers and member expressions
+        if (
+          firstArg.type === 'Identifier' ||
+          firstArg.type === 'MemberExpression'
+        ) {
+          const pattern = getFirstArgPattern(firstArg as Rule.Node);
+
+          if (pattern) {
+            // Only report if we're sure it's not an AI instance
+            // If it's a property access we can't track (like ctx.ai), don't report
+            if (!isKnownAiInstance(pattern)) {
+              // For simple identifiers not tracked, only report if we have
+              // tracked at least one getAI call (meaning the file uses getAI)
+              // This avoids false positives when AI is imported from another module
+              if (
+                aiVariables.size === 0 &&
+                classAiProperties.size === 0 &&
+                !pattern.startsWith('this.')
+              ) {
+                // No getAI tracked in this file - AI might be imported
+                // Be conservative and don't report
+                return;
+              }
+
               context.report({
                 node: firstArg,
                 messageId: 'wrongFirstArg',
                 data: {
-                  argType: firstArg.name,
+                  argType: pattern,
                 },
               });
             }
           }
-        } else if (firstArg.type === 'Literal') {
-          // First argument is a literal (string, number, etc.) - definitely wrong
+          return;
+        }
+
+        // First argument is a literal (string, number, etc.) - definitely wrong
+        if (firstArg.type === 'Literal') {
           context.report({
             node: firstArg,
             messageId: 'wrongFirstArg',
@@ -96,8 +197,11 @@ const rule: Rule.RuleModule = {
               argType: typeof firstArg.value,
             },
           });
-        } else if (firstArg.type === 'ObjectExpression') {
-          // First argument is an object - should be AI instance, not config
+          return;
+        }
+
+        // First argument is an object - should be AI instance, not config
+        if (firstArg.type === 'ObjectExpression') {
           context.report({
             node: firstArg,
             messageId: 'wrongFirstArg',
@@ -105,6 +209,22 @@ const rule: Rule.RuleModule = {
               argType: 'object',
             },
           });
+          return;
+        }
+
+        // For CallExpression as first arg (e.g., getGenerativeModel(getAI(...), ...))
+        // This is valid if it's a direct getAI call
+        if (firstArg.type === 'CallExpression') {
+          const innerCallee = getCalleeName(firstArg);
+          if (innerCallee !== 'getAI') {
+            context.report({
+              node: firstArg,
+              messageId: 'wrongFirstArg',
+              data: {
+                argType: innerCallee || 'function call',
+              },
+            });
+          }
         }
       },
     };

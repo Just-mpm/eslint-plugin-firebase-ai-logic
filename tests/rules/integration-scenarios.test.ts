@@ -590,6 +590,7 @@ describe('Integration Scenarios - Production-Like Code', () => {
                 systemInstruction: 'External service api_key: sk-live-abc123xyz',
               });
             `,
+            // Matches api_key reference (sk- too short for standalone pattern)
             errors: [{ messageId: 'sensitiveData' }],
           },
           // ❌ Credenciais de DB
@@ -599,7 +600,8 @@ describe('Integration Scenarios - Production-Like Code', () => {
                 systemInstruction: 'Database: postgres://admin:secretPass@db.example.com/prod',
               });
             `,
-            errors: [{ messageId: 'sensitiveData' }],
+            // Matches both connection string AND credentials in URL
+            errors: [{ messageId: 'sensitiveData' }, { messageId: 'sensitiveData' }],
           },
         ],
       });
